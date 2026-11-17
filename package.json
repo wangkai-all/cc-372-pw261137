@@ -1,0 +1,14 @@
+{
+  "name": "pinned-export",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chunked, resumable exports from a live-editable source, pinned to one data version",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/pipeline.test.js test/http.test.js"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}

@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pinned-version export console</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="viz-root">
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <div>
+      <h1>Pinned-version export</h1>
+      <p class="sub">Chunked export over a live, editable source · one version per archive</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <button id="theme-toggle" class="btn ghost" type="button" aria-label="Toggle colour theme">Dark</button>
+    <span id="clock" class="clock" aria-live="off"></span>
+  </div>
+</header>
+
+<main>
+  <!-- KPI row -->
+  <section class="kpi-row" aria-label="Pipeline at a glance">
+    <article class="stat">
+      <p class="stat-label">Live source rows</p>
+      <p class="stat-value" id="kpi-rows">—</p>
+      <p class="stat-foot" id="kpi-rows-foot">versioned, deletable</p>
+    </article>
+    <article class="stat">
+      <p class="stat-label">Logged changes</p>
+      <p class="stat-value" id="kpi-changes">—</p>
+      <p class="stat-foot" id="kpi-changes-foot">append-only history</p>
+    </article>
+    <article class="stat">
+      <p class="stat-label">Held snapshot space</p>
+      <p class="stat-value" id="kpi-snapshot">—</p>
+      <p class="stat-foot" id="kpi-snapshot-foot">paid by materialised pins</p>
+    </article>
+    <article class="stat">
+      <p class="stat-label">Exported parts on disk</p>
+      <p class="stat-value" id="kpi-parts">—</p>
+      <p class="stat-foot" id="kpi-parts-foot">immutable after commit</p>
+    </article>
+  </section>
+
+  <!-- controls -->
+  <section class="panel controls" aria-label="Controls">
+    <div class="control-group">
+      <h2>Source</h2>
+      <div class="field-row">
+        <label class="field"><span>Rows</span><input id="gen-rows" type="number" min="0" max="500000" value="24000" /></label>
+        <label class="field"><span>Payload bytes</span><input id="gen-bytes" type="number" min="16" max="8192" value="420" /></label>
+        <button id="gen-run" class="btn" type="button">Regenerate</button>
+      </div>
+      <div class="field-row">
+        <label class="field"><span>Correct</span><input id="mut-updates" type="number" min="0" max="20000" value="400" /></label>
+        <label class="field"><span>Delete</span><input id="mut-deletes" type="number" min="0" max="20000" value="80" /></label>
+        <label class="field"><span>Insert</span><input id="mut-inserts" type="number" min="0" max="20000" value="40" /></label>
+        <button id="mut-run" class="btn" type="button">Edit source</button>
+      </div>
+      <p class="hint" id="source-hint">Edits append to the change log; running exports keep reading their registered version.</p>
+    </div>
+
+    <div class="control-group">
+      <h2>New export</h2>
+      <div class="field-row">
+        <label class="field"><span>Window ids</span><input id="job-width" type="number" min="10" max="50000" value="1000" /></label>
+        <label class="field"><span>Workers</span><input id="job-workers" type="number" min="1" max="8" value="3" /></label>
+        <label class="field"><span>Retention s</span><input id="job-retention" type="number" min="30" max="86400" value="900" /></label>
+      </div>
+      <div class="field-row">
+        <button id="job-snapshot" class="btn" type="button">Export · materialised snapshot</button>
+        <button id="job-replay" class="btn" type="button">Export · replay recipe</button>
+      </div>
+      <p class="hint">Both pin the same version. The strategy changes what is held and what a resume recomputes, not correctness.</p>
+    </div>
+  </section>
+
+  <!-- cost -->
+  <section class="panel cost" aria-label="Pin cost comparison">
+    <div class="panel-head">
+      <h2>What a pin really costs</h2>
+      <div class="panel-actions">
+        <button id="probe-run" class="btn ghost" type="button">Measure costs</button>
+        <span class="hint" id="probe-when">not measured yet</span>
+      </div>
+    </div>
+    <p class="panel-lede">
+      The two strategies buy the same guarantee with different resources. Disk is held for the job's
+      life; recomputation is paid again on every resume. They are shown in their own units — never
+      collapsed into one score.
+    </p>
+    <div class="cost-grid">
+      <article class="cost-card" id="cost-snapshot">
+        <header>
+          <span class="dot" style="background: var(--series-1)"></span>
+          <h3>Materialised snapshot</h3>
+          <span class="tag" id="cost-snap-tag">—</span>
+        </header>
+        <dl class="cost-facts">
+          <div><dt>Disk held</dt><dd id="cost-snap-disk">—</dd></div>
+          <div><dt>One-time pin</dt><dd id="cost-snap-pin">—</dd></div>
+          <div><dt>Resume rebuild</dt><dd id="cost-snap-rebuild">—</dd></div>
+          <div><dt>Resume read cost</dt><dd id="cost-snap-resume">—</dd></div>
+        </dl>
+        <div class="meter" role="img" aria-labelledby="cost-snap-meter-label">
+          <div class="meter-track"><div class="meter-fill" id="meter-snap-disk" style="background: var(--series-1)"></div></div>
+          <p class="meter-label" id="cost-snap-meter-label">Held bytes vs. the other strategy</p>
+        </div>
+      </article>
+
+      <article class="cost-card" id="cost-replay">
+        <header>
+          <span class="dot" style="background: var(--series-2)"></span>
+          <h3>Replay recipe</h3>
+          <span class="tag" id="cost-replay-tag">—</span>
+        </header>
+        <dl class="cost-facts">
+          <div><dt>History retained</dt><dd id="cost-replay-disk">—</dd></div>
+          <div><dt>One-time pin</dt><dd id="cost-replay-pin">—</dd></div>
+          <div><dt>Resume rebuild</dt><dd id="cost-replay-rebuild">—</dd></div>
+          <div><dt>Resume compute</dt><dd id="cost-replay-resume">—</dd></div>
+        </dl>
+        <div class="meter" role="img" aria-labelledby="cost-replay-meter-label">
+          <div class="meter-track"><div class="meter-fill" id="meter-replay-disk" style="background: var(--series-2)"></div></div>
+          <p class="meter-label" id="cost-replay-meter-label">Retained bytes vs. the other strategy</p>
+        </div>
+      </article>
+    </div>
+    <table class="data-table" id="cost-table">
+      <caption>Measured on a sample of windows; projections scale by window count. Every figure is measured, not assumed.</caption>
+      <thead>
+        <tr><th scope="col">Figure</th><th scope="col">Snapshot</th><th scope="col">Replay</th><th scope="col">Basis</th></tr>
+      </thead>
+      <tbody id="cost-table-body"></tbody>
+    </table>
+  </section>
+
+  <!-- jobs -->
+  <section class="panel jobs" aria-label="Exports">
+    <div class="panel-head">
+      <h2>Exports</h2>
+      <div class="panel-actions">
+        <button id="gc-sweep" class="btn ghost" type="button">Run retention sweep</button>
+        <span class="hint" id="gc-hint"></span>
+      </div>
+    </div>
+    <div id="jobs-list" class="jobs-list">
+      <p class="empty">No exports yet. Create one above.</p>
+    </div>
+  </section>
+
+  <!-- events -->
+  <section class="panel events" aria-label="Activity">
+    <div class="panel-head"><h2>Activity</h2></div>
+    <ol id="events-list" class="event-list"></ol>
+  </section>
+
+  <!-- job detail -->
+  <dialog id="job-dialog" class="dialog">
+    <form method="dialog" class="dialog-head">
+      <div>
+        <h2 id="dlg-title">Export</h2>
+        <p class="sub" id="dlg-sub"></p>
+      </div>
+      <button class="btn ghost" value="close" type="submit">Close</button>
+    </form>
+    <div class="dialog-body">
+      <div class="dlg-actions">
+        <button class="btn" id="dlg-download" type="button">Download ZIP</button>
+        <button class="btn ghost" id="dlg-verify-quick" type="button">Verify (quick)</button>
+        <button class="btn ghost" id="dlg-verify-deep" type="button">Verify (deep)</button>
+        <button class="btn ghost" id="dlg-pause" type="button">Pause</button>
+        <button class="btn ghost" id="dlg-resume" type="button">Resume</button>
+        <button class="btn ghost" id="dlg-cancel" type="button">Cancel</button>
+      </div>
+      <div id="dlg-summary" class="dlg-summary"></div>
+      <div id="dlg-verify-out" class="verify-out" hidden></div>
+      <div class="windows-head">
+        <h3>Parts</h3>
+        <p class="hint">Revision touches only unexported windows; rewriting an exported one re-reads it from the pin.</p>
+      </div>
+      <div class="windows-scroll">
+        <table class="data-table windows-table">
+          <thead>
+            <tr>
+              <th scope="col">#</th><th scope="col">Id range</th><th scope="col">State</th>
+              <th scope="col">Rows</th><th scope="col">Bytes</th><th scope="col">Checks</th><th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="windows-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</main>
+<script src="/app.js" type="module"></script>
+</body>
+</html>
